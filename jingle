@@ -40,11 +40,13 @@ engine="pico"
 #engine="gtts"
 
 # **EDIT THIS!** Use a trailing slash for folder names ("/folder/").
+# The $(xdg-user-dir MUSIC) points to the 'Music' folder in your home directory.
 media_folder="$(xdg-user-dir MUSIC)/Other/Jingles/Programm/"
 # padding in seconds, at start, at end
 pad="pad 0 0"
 # add a logo at start and end, specify it here (2 ch, 44.1 kHz); empty string if none
 # **EDIT THIS!**
+# The $(xdg-user-dir MUSIC) points to the 'Music' folder in your home directory.
 #logo=''
 logo="$(xdg-user-dir MUSIC)/Other/Sounds/MCH/Whoosh2.flac"
 # station name (used as artist in ID3 tag)
