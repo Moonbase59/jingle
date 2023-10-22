@@ -1,0 +1,195 @@
+#!/bin/bash
+# jingle
+# 2023-05-30 Moonbase
+# 2023-09-02 -- added gtts, simplified sox logic, adjustable sample rate
+# 2023-10-23 -- use $(xdg-user-dir MUSIC) to find path to Music folder
+#
+# Create a MP3 Jingle with specified text.
+# jingle "FILENAME" "Text to speak"
+# FILENAME without extension (will be used as Title tag)
+# Text to speak will be surrounded by logo sound, if specified
+# and saved into the specified media folder
+#
+# Since TTS quality is usually rather low and most stations
+# broadcast 128 kbit/s MP3 streams, it makes no sense blowing up the
+# file size by artifically creating a "better quality". It is NOT.
+# We use 2ch, 44.1kHz, 128kbit/s MP3 here.
+#
+# Needs: sox
+# Optional: mid3iconv
+# Engines: pico2wave, gtts-cli
+
+me=`basename "$0"`
+
+# Possible output languages for "pico" (pico2wave)
+# (might require different sox post-processing)
+# de-DE - German
+# en-GB - British Englisch
+# en-US - US Englisch
+# fr-FR - French
+# it-IT - Italian
+# es-ES - Spanish
+
+# "gtts" (gtts-cli) supports more languages, see 'gtts-cli --all'
+
+lang="de-DE" # language for PicoTTS (Google TTS will use the first 2 letters)
+
+# set to the TTS engine you prefer
+# currently supported: pico (pico2wave), gtts (gtts-cli)
+engine="pico"
+#engine="gtts"
+
+# **EDIT THIS!** Use a trailing slash for folder names ("/folder/").
+media_folder="$(xdg-user-dir MUSIC)/Other/Jingles/Programm/"
+# padding in seconds, at start, at end
+pad="pad 0 0"
+# add a logo at start and end, specify it here (2 ch, 44.1 kHz); empty string if none
+# **EDIT THIS!**
+#logo=''
+logo="$(xdg-user-dir MUSIC)/Other/Sounds/MCH/Whoosh2.flac"
+# station name (used as artist in ID3 tag)
+station="Nite Radio"
+# some other tags you might want to preset
+# Note: sox writes ID3v1.1 + ID3v2.3.0 tags
+album="Promo"
+genre="Jingles"
+
+# In AzuraCast, edit the Jingle, and set, in the "Advanced" tab:
+#   Custom Fading: Overlap Time (seconds): 0.1
+#   Custom Fading: Fade-In Time (seconds): 0.1
+#   Custom Fading: Fade-Out Time (seconds): 0.1 (0 ignores the fade-out)
+
+# get current year for tag
+YEAR=$(date +%Y)
+
+# You shouldn’t need to change this. IF you do, remember that the logo file(s)
+# MUST have the same sample rate!
+samplerate=44100
+
+show_help () {
+echo "$me FILENAME \"TEXT TO SPEAK\""
+echo "Generate MP3 Jingle in ${media_folder},"
+echo "surrounded by logo sound."
+echo ""
+echo "Use FILENAME without extension (but with quoting if needed)."
+echo "It will be used as the ID3 'title' tag."
+exit 1
+}
+
+if [ "$1" = "" ] ; then
+  show_help
+fi
+
+if [ "$2" = "" ] ; then
+  show_help
+fi
+
+# function to check if required software is installed
+#   is_installed COMMAND
+#     returns 0 (installed) or 1 (not installed)
+#   is_installed COMMAND value
+#     returns 0 (installed) or exits with 'value' and displays an error message
+is_installed() {
+  if ! command -v "$1" > /dev/null ; then
+    if [ ! -z "$2" ] ; then
+      echo >&2 "$me: Error: '$1' not installed."
+      exit $2
+    else
+      return 1
+    fi
+  fi
+}
+
+# check if sox installed, exit if not
+is_installed sox 1
+
+# build text
+text="$2"
+
+# use sox to make output better understandable (voices are rather muffled)
+# adding some treble in the range of +3 to +6 dB helps
+# some voices might need a little bass reduction, use s/th like "bass -6 400"
+# to avoid clipping, give headroom (gain -h) and reclaim afterwards (gain -r)
+# skip the "compand" part if you don’t want compression/limiting.
+
+# sox effects to optimize TTS sound:
+# these can vary depending on engine & language used (see CASE)
+sox_effect=''
+
+# sox compressor/limiter settings I use to optimize speech output
+sox_compand='compand 0.008,0.024 -60,-60,-40,-35,0,-20 10 -60'
+
+# create WAV audio file using PicoTTS
+case $engine in
+
+  pico)
+    is_installed 'pico2wave' 1 # check if installed, exit if not
+    #text='<volume level="60">'"$2</volume>"
+    pico2wave -l=$lang -w=/tmp/jingle.wav "$text"
+    sox_effect='bass +2 treble +3'
+    sox -G /tmp/jingle.wav /tmp/jingle2.wav channels 2 rate $samplerate $sox_effect
+    ;;
+  
+  gtts)
+    is_installed 'gtts-cli' 1 # check if installed, exit if not
+    gtts-cli -l ${lang:0:2} -o /tmp/jingle.mp3 "$text"
+    # Google TTS is a little slow, speed it up a little
+    sox_effect='tempo 1.2'
+    sox -G /tmp/jingle.mp3 /tmp/jingle2.wav channels 2 rate $samplerate $sox_effect
+    ;;
+  
+  *)
+    echo >&2 "$me: Unknown TTS engine '$engine'"
+    exit 1
+
+esac
+
+# SOX processing: Add logo(s), tags, effects, apply compression/limiting, pad.
+if [ "$logo" != "" ] ; then
+  # make <logo> <jingle> <logo> MP3
+  # ensure # channels and sample rate match
+  sox -G "$logo" /tmp/logo.wav channels 2 rate $samplerate
+  # combine and process
+  sox -G /tmp/logo.wav /tmp/jingle2.wav /tmp/logo.wav \
+    -c2 -r $samplerate -C 128 \
+    --add-comment "Title=$1" \
+    --add-comment "Artist=$station" \
+    --add-comment "Album=$album" \
+    --add-comment "Year=$YEAR" \
+    --add-comment "Genre=$genre" \
+    /tmp/jingle.mp3 \
+    $sox_compand \
+    $pad
+else
+  # make <jingle> MP3 only
+  sox -G /tmp/jingle2.wav \
+    -c2 -r $samplerate -C 128 \
+    --add-comment "Title=$1" \
+    --add-comment "Artist=$station" \
+    --add-comment "Album=$album" \
+    --add-comment "Year=$YEAR" \
+    --add-comment "Genre=$genre" \
+    /tmp/jingle.mp3 \
+    $sox_compand \
+    $pad
+fi
+
+# Use 'mid3iconv' from the Mutagen package (if available), to
+# - repair language encoding
+# - remove ID3v1 tag
+# - convert to ID3v2.4
+if is_installed mid3iconv ; then
+  mid3iconv -q --remove-v1 /tmp/jingle.mp3
+fi
+
+# If loudgain is installed, also do ReplayGain calculation
+# -I3 forces ID3v2.3, -I4 forces ID3v2.4 (default)
+# -L forces lowercase replaygain tags (default uppercase)
+if is_installed loudgain ; then
+  loudgain -I3 -S -L -a -k -s e /tmp/jingle.mp3
+fi
+
+# copy it into our media folder
+cp /tmp/jingle.mp3 "${media_folder}$1.mp3"
+# diag only: play it loud (sox play replaygain seems not to work)
+play --replay-gain track "${media_folder}$1.mp3"
