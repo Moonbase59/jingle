@@ -7,7 +7,7 @@ Sometimes you just quickly need a short jingle with a bumper, and have no speake
 This is a little bash script that does just that, using a TTS (Text-to-Speech) engine in a nice way. It can:
 
 - generate an MP3 file from either PicoTTS (local) or gtts (Google TTS)
-- perform a little sound optimization on the TTS voice
+- perform a little sound optimization on the TTS voice (bass/treble correction, compressor/limiter)
 - add a starting/ending bumper, using a sound file
 - add a nice ID3 tag (fills in Title, Artist, Album, Year, Genre)
 - perform ReplayGain calculation and add ReplayGain tags using [loudgain](https://github.com/Moonbase59/loudgain)
