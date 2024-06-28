@@ -1,5 +1,7 @@
 # jingle
 
+**If you like what you got, please consider to [![Donate with Paypal](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/donate/?hosted_button_id=PBPR63362LDEU). Thank you! ❤️**
+
 **Quickly generate a Jingle using Text-to-Speech**
 
 Sometimes you just quickly need a short jingle with a bumper, and have no speaker available. Or sit hundreds of miles away and must do it on your server.
